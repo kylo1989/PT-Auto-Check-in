@@ -22,7 +22,7 @@
 ### 第二步：安装本脚本
 点击下方 Raw 链接即可直接弹出安装界面：
 
-👉 **[点此一键安装 `pt-auto-checkin.user.js`](https://raw.githubusercontent.com/your-username/pt-auto-checkin/main/pt-auto-checkin.user.js)**
+👉 **[点此一键安装 `pt-auto-checkin.user.js`](https://raw.githubusercontent.com/kylo1989/pt-auto-checkin/main/pt-auto-checkin.user.js)**
 
 *(或者直接复制仓库中 `pt-auto-checkin.user.js` 的源码，在油猴扩展中点击“添加新脚本”粘贴保存即可)*
 
