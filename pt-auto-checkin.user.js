@@ -3,7 +3,7 @@
 // @namespace    https://github.com/your-username/pt-auto-checkin
 // @version      1.2.0
 // @description  内置122个主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到。
-// @author       YourName
+// @author       kylo1989
 // @match        *://*.jptv.club/*
 // @match        *://*.wintersakura.net/*
 // @match        *://*.audiences.me/*
