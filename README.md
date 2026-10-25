@@ -1,5 +1,8 @@
 # PT Auto Check-in (PT 站点全自动签到油猴脚本)
 
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/kylo1989/PT-Auto-Check-in)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/kylo1989/PT-Auto-Check-in/blob/main/LICENSE)
+
 一个开箱即用的 Tampermonkey（油猴）自动签到脚本。内置 **122 个主流国内外 PT 站点**的域名匹配规则（源自 `MetaCubeX/meta-rules-dat` 的 `category-pt` 目录），在你日常打开浏览器访问 PT 站时，自动通过随机延时完成签到点击或跳转至签到页面。
 
 ## ✨ 核心特性
@@ -19,12 +22,16 @@
 - Chrome / Edge: [Tampermonkey](https://www.tampermonkey.net/) 或 [ScriptCat (脚本猫)](https://docs.scriptcat.org/)
 - Firefox: [Tampermonkey](https://addons.mozilla.org/zh-CN/firefox/addon/tampermonkey/) 或 [Violentmonkey](https://violentmonkey.github.io/)
 
-### 第二步：安装本脚本
-点击下方 Raw 链接即可直接弹出安装界面：
+### 第二步：一键安装本脚本
+已安装油猴扩展的用户，点击下方按钮或链接即可直接弹出脚本安装界面：
 
-👉 **[点此一键安装 `pt-auto-checkin.user.js`]([https://raw.githubusercontent.com/kylo1989/pt-auto-checkin/main/pt-auto-checkin.user.js](https://github.com/kylo1989/PT-Auto-Check-in/raw/main/pt-auto-checkin.user.js))**
+[![Install via GitHub](https://img.shields.io/badge/一键安装-GitHub_Raw_(官方源)-2ea44f?style=for-the-badge&logo=tampermonkey)](https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js)
+[![Install via jsDelivr](https://img.shields.io/badge/一键安装-jsDelivr_(国内加速)-1890ff?style=for-the-badge&logo=cloudflare)](https://fastly.jsdelivr.net/gh/kylo1989/PT-Auto-Check-in@main/pt-auto-checkin.user.js)
 
-*(或者直接复制仓库中 `pt-auto-checkin.user.js` 的源码，在油猴扩展中点击“添加新脚本”粘贴保存即可)*
+- 👉 **GitHub Raw 直链安装**：[https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js](https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js)
+- 👉 **jsDelivr CDN 加速安装**：[https://fastly.jsdelivr.net/gh/kylo1989/PT-Auto-Check-in@main/pt-auto-checkin.user.js](https://fastly.jsdelivr.net/gh/kylo1989/PT-Auto-Check-in@main/pt-auto-checkin.user.js)
+
+*(如果点击链接后未弹出安装界面，可直接复制仓库中 [`pt-auto-checkin.user.js`](https://github.com/kylo1989/PT-Auto-Check-in/blob/main/pt-auto-checkin.user.js) 的源码，在油猴扩展中点击“添加新脚本”粘贴保存即可)*
 
 ## 📋 支持站点列表 (122 个域名)
 
@@ -42,22 +49,4 @@
 - `hitpt.com`, `ubits.club`, `ultrahd.net`, `ptcafe.club`, `zmpt.cc`, `orpheus.network`, `pandapt.net`, `1ptba.com`, `icc2022.com`, `cyanbug.net`
 - `ilovelemonhd.me`, `lemonhd.club`, `lemonhd.net`, `lemonhd.org`, `beitai.pt`, `nexushd.org`, `bitpt.cn`, `hdchina.org`, `hdcmct.org`, `hdhome.org`
 - `hdsky.me`, `hdzone.me`, `pt.soulvoice.club`, `pt.btschool.club`, `bt.byr.cn`, `pt.hdupt.com`, `neu6.edu.cn`, `pt.upxin.net`, `pt.0ff.cc`, `share.ilolicon.com`
-- `pt.hd4fans.org`, `pt.nwsuaf6.edu.cn`, `hudbt.hust.edu.cn`, `pt.xauat.edu.cn`, `pt.sjtu.edu.cn`, `myanonamouse.net`, `nebulance.io`, `torrentleech.cc`, `torrentleech.org`, `skyey2.com`
-- `skyeysnow.com`, `m-team.cc`, `m-team.io`, `mt.cc`, `dmhy.best`, `dmhy.org`
-
-</details>
-
-## ⚙️ 工作机制说明
-
-1. **常规无验证站点**：打开站点任意页面后，脚本在后台等待随机秒数，检测到“签到 / 打卡 / 每日签到”按钮后自动触发点击或跳转至 `attendance.php` 完成签到。
-2. **含图文验证码/问答题站点**（如 HDSky、U2 动漫花园等）：脚本会自动帮你跳转到签到区域，并自动用红框高亮聚焦验证码输入框，弹出提醒由人工完成验证输入，避免因错误提交导致扣除魔力或触发账号警告。
-3. **无签到机制站点**（如 M-Team、Gazelle 架构外站等）：由于这类站点仅要求保持登录访问而无签到按钮，脚本静默运行，不影响正常浏览。
-
-## ⚠️ 免责声明
-
-- 本项目仅供个人学习与浏览器自动化交互研究使用。
-- 部分 PT 站点对自动化脚本有严格限制，请在使用前确认目标站点的用户规则（Rules）。如有特定站点不希望启用自动点击，可在 Tampermonkey 的脚本设置中添加“排除（`@exclude`）”域名。
-
-## 📄 License
-
-[MIT License](LICENSE)
+- `pt.hd4fans.org`, `pt.nwsuaf6.edu.cn`, `hudbt.hust.edu.cn`, `pt.xauat.edu.cn`, `pt.sjtu.edu.cn`, `myanonamouse.net`, `nebulance.io`, `torrentleech.cc`, `torrentleech.org`, `skyey2
