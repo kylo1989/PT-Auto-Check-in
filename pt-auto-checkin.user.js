@@ -207,7 +207,7 @@
 
         const targetKeywords = [
             '签到', '签 到', '打卡', '每日签到', '每日打卡', '立即签到',
-            '签到的猫粮', '猫粮', '领取魔力', '簽到', 'Check in', 'Attendance'
+            '签到得猫粮', '猫粮', '领取魔力', '簽到', 'Check in', 'Attendance'
         ];
         return targetKeywords.some(k => text.includes(k));
     }
@@ -293,7 +293,7 @@
                 host: 'haidan',
                 selector: '#modalBtn, input[value*="每日打卡"], button[id*="modalBtn"]'
             },
-            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到的猫粮” (#attendance-click)
+            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到得猫粮” (#attendance-click)
             {
                 host: 'pterclub',
                 selector: '#attendance-click, a[href*="attendance-ajax.php"], a[href*="attendance.php"]'
@@ -379,7 +379,7 @@
         const exactTargets = [
             '签到', '[签到]', '签 到', '[签 到]', '每日签到', '立即签到', '点此签到',
             '打卡', '每日打卡', '[每日打卡]',
-            '签到的猫粮', '领取猫粮', '[签到的猫粮]', '领取魔力'
+            '签到得猫粮', '领取猫粮', '[签到得猫粮]', '领取魔力'
         ];
 
         for (const el of allButtons) {
@@ -394,7 +394,7 @@
             if (
                 !el.disabled &&
                 (exactTargets.includes(text) ||
-                    text.includes('签到的猫粮') ||
+                    text.includes('签到得猫粮') ||
                     text.includes('每日打卡') ||
                     text.includes('立即签到') ||
                     text.includes('点此签到'))
