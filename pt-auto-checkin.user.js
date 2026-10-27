@@ -1,14 +1,15 @@
 // ==UserScript==
-// @name         PT 站点全自动签到助手 (123站内置版)
+// @name         PT 站点全自动签到助手 (124站内置版)
 // @namespace    https://github.com/kylo1989/PT-Auto-Check-in
-// @version      1.2.2
-// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已专门适配海胆cc每日打卡、猫站PTer签到猫粮等特殊站点）。
+// @version      1.2.3
+// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已适配PlayLet短剧站、海胆cc每日打卡、猫站PTer签到猫粮等）。
 // @author       kylo1989
 // @homepageURL  https://github.com/kylo1989/PT-Auto-Check-in
 // @supportURL   https://github.com/kylo1989/PT-Auto-Check-in/issues
 // @updateURL    https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js
 // @downloadURL  https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js
 // @license      MIT
+// @match        *://*.playlet.cc/*
 // @match        *://*.jptv.club/*
 // @match        *://*.wintersakura.net/*
 // @match        *://*.audiences.me/*
@@ -184,10 +185,10 @@
         }, 4000);
     }
 
-    // 提取元素的文本内容（兼容 a / button / input 按钮）
+    // 提取元素的文本内容（兼容 a / button / input / span 按钮）
     function getElementText(el) {
         if (!el) return '';
-        return (el.innerText || el.value || el.title || el.textContent || '').trim();
+        return (el.innerText || el.value || el.title || el.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
     // 判断元素文本是否代表“已签到”
@@ -195,7 +196,7 @@
         if (!text) return false;
         const doneKeywords = [
             '已签到', '签到成功', '已得', '已经签到', '已经打卡', '已打卡',
-            '已领取', 'Signed', 'Checked', '获得魔力', '今日已'
+            '已领取', 'Signed', 'Checked', '获得魔力', '今日已', '签到已得'
         ];
         return doneKeywords.some(k => text.includes(k));
     }
@@ -205,10 +206,25 @@
         if (!text || isAlreadySignedText(text)) return false;
 
         const targetKeywords = [
-            '签到', '签 到', '打卡', '每日签到', '每日打卡',
+            '签到', '签 到', '打卡', '每日签到', '每日打卡', '立即签到',
             '签到的猫粮', '猫粮', '领取魔力', '簽到', 'Check in', 'Attendance'
         ];
         return targetKeywords.some(k => text.includes(k));
+    }
+
+    // 触发链接跳转或按钮点击
+    function triggerElement(el, text) {
+        const href = el.getAttribute('href') || '';
+        GM_setValue(getTodayKey('done'), true);
+
+        // 如果是直接跳转至常规签到页的链接（排除 ajax 接口、javascript 伪协议和锚点）
+        if (href && !href.startsWith('javascript:') && !href.startsWith('#') && !href.includes('ajax')) {
+            showToast(`发现【${text}】入口，正在自动跳转...`, '#1890ff');
+            window.location.href = el.href;
+        } else {
+            showToast(`发现【${text}】按钮，正在自动点击...`, '#52c41a');
+            el.click();
+        }
     }
 
     // 针对签到专页（如 attendance.php）的二次提交或状态确认处理
@@ -237,7 +253,15 @@
         }
 
         // 3. 如果直接跳转进 attendance.php 即代表完成签到
-        if (pageText.includes('签到成功') || pageText.includes('已签到') || pageText.includes('获得了') || pageText.includes('魔力值') || pageText.includes('猫粮')) {
+        if (
+            pageText.includes('签到成功') ||
+            pageText.includes('已签到') ||
+            pageText.includes('已经签到') ||
+            pageText.includes('获得了') ||
+            pageText.includes('魔力值') ||
+            pageText.includes('猫粮') ||
+            pageText.includes('连续签到')
+        ) {
             GM_setValue(getTodayKey('done'), true);
             showToast('今日签到已完成！', '#52c41a');
         }
@@ -259,6 +283,11 @@
 
         // 1. 特殊站点专用选择器适配（优先匹配）
         const specialRules = [
+            // PlayLet (playlet.cc) - 新版 NexusPHP 签到入口适配
+            {
+                host: 'playlet.cc',
+                selector: 'a[href*="attendance.php"], a.faqlink[href*="attendance"], #sign_in, [onclick*="attendance"], a[href*="sign"]'
+            },
             // 海胆之家 (haidan.cc / haidan.video) - 按钮为 <input type="submit" id="modalBtn" value="每日打卡">
             {
                 host: 'haidan',
@@ -303,9 +332,7 @@
                         return;
                     }
                     if (isUncheckedText(text)) {
-                        showToast(`发现 ${HOST} 按钮【${text}】，正在自动触发...`, '#52c41a');
-                        el.click();
-                        GM_setValue(getTodayKey('done'), true);
+                        triggerElement(el, text);
                         return;
                     }
                 }
@@ -321,6 +348,7 @@
             '#modalBtn',
             'a[href*="action=sign"]',
             'a[onclick*="sign"]',
+            'a[onclick*="attendance"]',
             '#sign_in',
             '.sign-in',
             'button[class*="sign"]',
@@ -340,43 +368,38 @@
                     return;
                 }
                 if (isUncheckedText(text)) {
-                    const href = el.getAttribute('href') || '';
-                    GM_setValue(getTodayKey('done'), true);
-
-                    // 如果是直接跳转至常规签到页的链接（排除 ajax 接口和伪协议）
-                    if (href && !href.startsWith('javascript:') && !href.startsWith('#') && !href.includes('ajax')) {
-                        showToast(`发现【${text}】入口，正在自动跳转...`, '#1890ff');
-                        window.location.href = el.href;
-                    } else {
-                        showToast(`发现【${text}】按钮，正在自动点击...`, '#52c41a');
-                        el.click();
-                    }
+                    triggerElement(el, text);
                     return;
                 }
             }
         }
 
-        // 3. 兜底扫描：遍历所有 <a>、<button>、<input> 寻找包含指定签到文本的节点
-        const allButtons = document.querySelectorAll('a, button, input[type="button"], input[type="submit"]');
+        // 3. 兜底扫描：遍历所有 <a>、<button>、<input> 以及可点击的 <span> 寻找包含指定签到文本的节点
+        const allButtons = document.querySelectorAll('a, button, input[type="button"], input[type="submit"], span[onclick], span[class*="btn"], span[class*="sign"]');
         const exactTargets = [
-            '签到', '[签到]', '每日签到', '立即签到',
+            '签到', '[签到]', '签 到', '[签 到]', '每日签到', '立即签到', '点此签到',
             '打卡', '每日打卡', '[每日打卡]',
-            '签到得猫粮', '领取猫粮', '[签到得猫粮]'
+            '签到的猫粮', '领取猫粮', '[签到的猫粮]', '领取魔力'
         ];
 
         for (const el of allButtons) {
             const text = getElementText(el);
-            if (!text) continue;
+            if (!text || text.length > 20) continue; // 排除过长的正文段落
 
             if (isAlreadySignedText(text)) {
                 GM_setValue(getTodayKey('done'), true);
                 return;
             }
 
-            if (!el.disabled && (exactTargets.includes(text) || text.includes('签到得猫粮') || text.includes('每日打卡'))) {
-                GM_setValue(getTodayKey('done'), true);
-                showToast(`已触发自动签到【${text}】`, '#52c41a');
-                el.click();
+            if (
+                !el.disabled &&
+                (exactTargets.includes(text) ||
+                    text.includes('签到的猫粮') ||
+                    text.includes('每日打卡') ||
+                    text.includes('立即签到') ||
+                    text.includes('点此签到'))
+            ) {
+                triggerElement(el, text);
                 return;
             }
         }
