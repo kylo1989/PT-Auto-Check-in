@@ -1,14 +1,15 @@
 // ==UserScript==
-// @name         PT 站点全自动签到助手 (124站内置版)
+// @name         PT 站点全自动签到助手 (125站内置版)
 // @namespace    https://github.com/kylo1989/PT-Auto-Check-in
-// @version      1.2.3
-// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已适配PlayLet短剧站、海胆cc每日打卡、猫站PTer签到猫粮等）。
+// @version      1.2.4
+// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已适配HDChina/HDWinG、PlayLet、海胆cc、猫站PTer等）。
 // @author       kylo1989
 // @homepageURL  https://github.com/kylo1989/PT-Auto-Check-in
 // @supportURL   https://github.com/kylo1989/PT-Auto-Check-in/issues
 // @updateURL    https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js
 // @downloadURL  https://raw.githubusercontent.com/kylo1989/PT-Auto-Check-in/refs/heads/main/pt-auto-checkin.user.js
 // @license      MIT
+// @match        *://*.hdwing.org/*
 // @match        *://*.playlet.cc/*
 // @match        *://*.jptv.club/*
 // @match        *://*.wintersakura.net/*
@@ -191,25 +192,27 @@
         return (el.innerText || el.value || el.title || el.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
-    // 判断元素文本是否代表“已签到”
+    // 判断元素文本是否代表“已签到”（自动去除中间空格后比对，兼容“已 签 到”）
     function isAlreadySignedText(text) {
         if (!text) return false;
+        const noSpace = text.replace(/\s+/g, '');
         const doneKeywords = [
             '已签到', '签到成功', '已得', '已经签到', '已经打卡', '已打卡',
             '已领取', 'Signed', 'Checked', '获得魔力', '今日已', '签到已得'
         ];
-        return doneKeywords.some(k => text.includes(k));
+        return doneKeywords.some(k => noSpace.includes(k));
     }
 
-    // 判断元素文本是否代表“未签到”
+    // 判断元素文本是否代表“未签到”（自动去除中间空格后比对，兼容 HDWinG 的“签 到”）
     function isUncheckedText(text) {
         if (!text || isAlreadySignedText(text)) return false;
+        const noSpace = text.replace(/\s+/g, '');
 
         const targetKeywords = [
-            '签到', '签 到', '打卡', '每日签到', '每日打卡', '立即签到',
-            '签到得猫粮', '猫粮', '领取魔力', '簽到', 'Check in', 'Attendance'
+            '签到', '打卡', '每日签到', '每日打卡', '立即签到',
+            '签到的猫粮', '猫粮', '领取魔力', '簽到', 'Checkin', 'Attendance'
         ];
-        return targetKeywords.some(k => text.includes(k));
+        return targetKeywords.some(k => noSpace.includes(k));
     }
 
     // 触发链接跳转或按钮点击
@@ -243,7 +246,7 @@
         // 2. 查找签到专页内的确认提交按钮（例如部分站点点击 attendance.php 后需再点一次提交）
         const submitBtns = document.querySelectorAll('input[type="submit"], input[type="button"], button[type="submit"], button');
         for (const btn of submitBtns) {
-            const val = getElementText(btn);
+            const val = getElementText(btn).replace(/\s+/g, '');
             if (!btn.disabled && (val.includes('签到') || val.includes('打卡') || val.includes('提交') || val.includes('领取'))) {
                 showToast('正在自动提交签到表单...', '#52c41a');
                 btn.click();
@@ -253,14 +256,15 @@
         }
 
         // 3. 如果直接跳转进 attendance.php 即代表完成签到
+        const cleanPageText = pageText.replace(/\s+/g, '');
         if (
-            pageText.includes('签到成功') ||
-            pageText.includes('已签到') ||
-            pageText.includes('已经签到') ||
-            pageText.includes('获得了') ||
-            pageText.includes('魔力值') ||
-            pageText.includes('猫粮') ||
-            pageText.includes('连续签到')
+            cleanPageText.includes('签到成功') ||
+            cleanPageText.includes('已签到') ||
+            cleanPageText.includes('已经签到') ||
+            cleanPageText.includes('获得了') ||
+            cleanPageText.includes('魔力值') ||
+            cleanPageText.includes('猫粮') ||
+            cleanPageText.includes('连续签到')
         ) {
             GM_setValue(getTodayKey('done'), true);
             showToast('今日签到已完成！', '#52c41a');
@@ -283,6 +287,15 @@
 
         // 1. 特殊站点专用选择器适配（优先匹配）
         const specialRules = [
+            // HDChina / HDWinG (hdwing.org / hdchina.org) - 右上角按钮“签 到”
+            {
+                host: 'hdwing.org',
+                selector: 'a.label-default[onclick*="signin"], a[onclick*="signin"], #sign_in, a[href*="attendance.php"], .label-default, a'
+            },
+            {
+                host: 'hdchina.org',
+                selector: 'a.label-default[onclick*="signin"], a[onclick*="signin"], #sign_in, a[href*="attendance.php"]'
+            },
             // PlayLet (playlet.cc) - 新版 NexusPHP 签到入口适配
             {
                 host: 'playlet.cc',
@@ -293,7 +306,7 @@
                 host: 'haidan',
                 selector: '#modalBtn, input[value*="每日打卡"], button[id*="modalBtn"]'
             },
-            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到得猫粮” (#attendance-click)
+            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到的猫粮” (#attendance-click)
             {
                 host: 'pterclub',
                 selector: '#attendance-click, a[href*="attendance-ajax.php"], a[href*="attendance.php"]'
@@ -302,11 +315,6 @@
             {
                 host: 'totheglory.im',
                 selector: 'a#signed'
-            },
-            // HDChina (hdchina.org)
-            {
-                host: 'hdchina.org',
-                selector: 'a.label-default[onclick*="signin"]'
             },
             // HDCity (hdcity.city)
             {
@@ -325,6 +333,7 @@
                 const elements = document.querySelectorAll(rule.selector);
                 for (const el of elements) {
                     const text = getElementText(el);
+                    if (!text || text.length > 15) continue;
                     // 如果按钮处于 disabled（如海胆“已经打卡”）或文本显示已签到，记录今日完成
                     if (el.disabled || isAlreadySignedText(text)) {
                         GM_setValue(getTodayKey('done'), true);
@@ -344,6 +353,8 @@
             'a[href*="attendance.php"]',
             'a[href*="attendance-ajax.php"]',
             'a.faqlink[href*="attendance"]',
+            'a.label-default[onclick*="signin"]',
+            'a[onclick*="signin"]',
             '#attendance-click',
             '#modalBtn',
             'a[href*="action=sign"]',
@@ -375,11 +386,11 @@
         }
 
         // 3. 兜底扫描：遍历所有 <a>、<button>、<input> 以及可点击的 <span> 寻找包含指定签到文本的节点
-        const allButtons = document.querySelectorAll('a, button, input[type="button"], input[type="submit"], span[onclick], span[class*="btn"], span[class*="sign"]');
-        const exactTargets = [
-            '签到', '[签到]', '签 到', '[签 到]', '每日签到', '立即签到', '点此签到',
+        const allButtons = document.querySelectorAll('a, button, input[type="button"], input[type="submit"], span[onclick], span[class*="btn"], span[class*="sign"], span[class*="label"]');
+        const exactTargetsNoSpace = [
+            '签到', '[签到]', '每日签到', '立即签到', '点此签到',
             '打卡', '每日打卡', '[每日打卡]',
-            '签到得猫粮', '领取猫粮', '[签到得猫粮]', '领取魔力'
+            '签到的猫粮', '领取猫粮', '[签到的猫粮]', '领取魔力'
         ];
 
         for (const el of allButtons) {
@@ -391,13 +402,14 @@
                 return;
             }
 
+            const noSpace = text.replace(/\s+/g, '');
             if (
                 !el.disabled &&
-                (exactTargets.includes(text) ||
-                    text.includes('签到得猫粮') ||
-                    text.includes('每日打卡') ||
-                    text.includes('立即签到') ||
-                    text.includes('点此签到'))
+                (exactTargetsNoSpace.includes(noSpace) ||
+                    noSpace.includes('签到的猫粮') ||
+                    noSpace.includes('每日打卡') ||
+                    noSpace.includes('立即签到') ||
+                    noSpace.includes('点此签到'))
             ) {
                 triggerElement(el, text);
                 return;
