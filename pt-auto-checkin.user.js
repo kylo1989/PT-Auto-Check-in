@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         PT 站点全自动签到助手 (125站内置版)
 // @namespace    https://github.com/kylo1989/PT-Auto-Check-in
-// @version      1.2.4
-// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已适配HDChina/HDWinG、PlayLet、海胆cc、猫站PTer等）。
+// @version      1.2.5
+// @description  内置主流PT站点域名匹配，打开网页后随机延时自动点击签到按钮或自动跳转至签到页完成签到（已适配猪站Piggo万年历、猫站PTer签到得猫粮、HDWinG、PlayLet、海胆cc等）。
 // @author       kylo1989
 // @homepageURL  https://github.com/kylo1989/PT-Auto-Check-in
 // @supportURL   https://github.com/kylo1989/PT-Auto-Check-in/issues
@@ -150,8 +150,8 @@
     const HOST = window.location.hostname;
     const PATH = window.location.pathname;
 
-    // 生成随机延时（默认 1500ms ~ 4000ms），降低机械化特征
-    function getRandomDelay(min = 1500, max = 4000) {
+    // 生成随机延时（默认 1500ms ~ 3800ms），降低机械化特征
+    function getRandomDelay(min = 1500, max = 3800) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
@@ -186,31 +186,32 @@
         }, 4000);
     }
 
-    // 提取元素的文本内容（兼容 a / button / input / span 按钮）
+    // 提取元素的文本内容（兼容 a / button / input / span / div 按钮）
     function getElementText(el) {
         if (!el) return '';
         return (el.innerText || el.value || el.title || el.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
-    // 判断元素文本是否代表“已签到”（自动去除中间空格后比对，兼容“已 签 到”）
+    // 判断元素文本是否代表“已签到”（自动去除中间空格后比对）
     function isAlreadySignedText(text) {
         if (!text) return false;
         const noSpace = text.replace(/\s+/g, '');
         const doneKeywords = [
-            '已签到', '签到成功', '已得', '已经签到', '已经打卡', '已打卡',
-            '已领取', 'Signed', 'Checked', '获得魔力', '今日已', '签到已得'
+            '已签到', '签到成功', '签到已得', '已经签到', '已经打卡', '已打卡',
+            '已领取', 'Signed', 'Checked', '获得魔力', '今日已', '今日已签'
         ];
         return doneKeywords.some(k => noSpace.includes(k));
     }
 
-    // 判断元素文本是否代表“未签到”（自动去除中间空格后比对，兼容 HDWinG 的“签 到”）
+    // 判断元素文本是否代表“未签到”（自动去除中间空格后比对）
     function isUncheckedText(text) {
         if (!text || isAlreadySignedText(text)) return false;
         const noSpace = text.replace(/\s+/g, '');
 
         const targetKeywords = [
             '签到', '打卡', '每日签到', '每日打卡', '立即签到',
-            '签到的猫粮', '猫粮', '领取魔力', '簽到', 'Checkin', 'Attendance'
+            '签到得猫粮', '签到的猫粮', '领取猫粮', '领取魔力',
+            '签到+', '簽到', 'Checkin', 'Attendance'
         ];
         return targetKeywords.some(k => noSpace.includes(k));
     }
@@ -218,15 +219,70 @@
     // 触发链接跳转或按钮点击
     function triggerElement(el, text) {
         const href = el.getAttribute('href') || '';
-        GM_setValue(getTodayKey('done'), true);
 
         // 如果是直接跳转至常规签到页的链接（排除 ajax 接口、javascript 伪协议和锚点）
+        // 注意：跳转前仅记录 redirected，等跳进目标页真正完成签到后再记录 done
         if (href && !href.startsWith('javascript:') && !href.startsWith('#') && !href.includes('ajax')) {
+            if (GM_getValue(getTodayKey('redirected'), false)) {
+                return;
+            }
+            GM_setValue(getTodayKey('redirected'), true);
             showToast(`发现【${text}】入口，正在自动跳转...`, '#1890ff');
             window.location.href = el.href;
         } else {
+            GM_setValue(getTodayKey('done'), true);
             showToast(`发现【${text}】按钮，正在自动点击...`, '#52c41a');
             el.click();
+        }
+    }
+
+    // 专门处理猪猪网 (piggo.me) 新版万年历签到
+    function handlePiggo() {
+        // 如果已经在 /calendar 万年历页面，轮询等待“签到 +xxx”按钮渲染并点击
+        if (PATH.includes('/calendar')) {
+            let attempts = 0;
+            const timer = setInterval(() => {
+                attempts++;
+                // 查找页面内所有可能是按钮的节点（button, div, span, a）
+                const nodes = document.querySelectorAll('button, a, div, span');
+                for (const el of nodes) {
+                    // 仅检查叶子节点或短文本按钮，防止匹配到外层大容器
+                    if (el.children.length > 2) continue;
+                    const text = getElementText(el);
+                    const noSpace = text.replace(/\s+/g, '');
+
+                    if (!text || noSpace.length > 15) continue;
+
+                    // 如果显示已签到/今日已签
+                    if (isAlreadySignedText(noSpace) || noSpace === '已签') {
+                        clearInterval(timer);
+                        GM_setValue(getTodayKey('done'), true);
+                        showToast('猪站今日已完成签到！', '#52c41a');
+                        return;
+                    }
+
+                    // 匹配猪站万年历的“签到 +1000”（即 /^签到(\+\d+)?$/）
+                    if (/^签到(\+\d+)?$/.test(noSpace)) {
+                        clearInterval(timer);
+                        GM_setValue(getTodayKey('done'), true);
+                        showToast(`发现猪站【${text}】按钮，正在自动点击...`, '#52c41a');
+                        el.click();
+                        return;
+                    }
+                }
+
+                if (attempts >= 10) {
+                    clearInterval(timer);
+                }
+            }, 800);
+            return;
+        }
+
+        // 如果不在 /calendar 页面且今日尚未跳转过，自动跳转至万年历签到页
+        if (!GM_getValue(getTodayKey('done'), false) && !GM_getValue(getTodayKey('redirected'), false)) {
+            GM_setValue(getTodayKey('redirected'), true);
+            showToast('正在自动前往猪站【签到/万年历】页面...', '#1890ff');
+            window.location.href = `${window.location.origin}/calendar`;
         }
     }
 
@@ -264,7 +320,8 @@
             cleanPageText.includes('获得了') ||
             cleanPageText.includes('魔力值') ||
             cleanPageText.includes('猫粮') ||
-            cleanPageText.includes('连续签到')
+            cleanPageText.includes('连续签到') ||
+            cleanPageText.includes('今日已')
         ) {
             GM_setValue(getTodayKey('done'), true);
             showToast('今日签到已完成！', '#52c41a');
@@ -273,6 +330,12 @@
 
     // 主入口：扫描导航栏与页面签到按钮
     function runCheckin() {
+        // 0. 猪猪网 (piggo.me) 独立流程处理
+        if (HOST.includes('piggo.me')) {
+            handlePiggo();
+            return;
+        }
+
         // 如果当前已经在 attendance.php 等签到专页，执行专页逻辑
         if (PATH.includes('attendance.php') || PATH.includes('bakatest.php')) {
             handleAttendancePage();
@@ -287,6 +350,11 @@
 
         // 1. 特殊站点专用选择器适配（优先匹配）
         const specialRules = [
+            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到得猫粮”
+            {
+                host: 'pterclub',
+                selector: '#attendance-click, a[href*="attendance"], a.faqlink, a, span'
+            },
             // HDChina / HDWinG (hdwing.org / hdchina.org) - 右上角按钮“签 到”
             {
                 host: 'hdwing.org',
@@ -305,11 +373,6 @@
             {
                 host: 'haidan',
                 selector: '#modalBtn, input[value*="每日打卡"], button[id*="modalBtn"]'
-            },
-            // 猫站 PTerClub (pterclub.net / pterclub.com) - 按钮为“签到的猫粮” (#attendance-click)
-            {
-                host: 'pterclub',
-                selector: '#attendance-click, a[href*="attendance-ajax.php"], a[href*="attendance.php"]'
             },
             // TTG (totheglory.im)
             {
@@ -390,7 +453,7 @@
         const exactTargetsNoSpace = [
             '签到', '[签到]', '每日签到', '立即签到', '点此签到',
             '打卡', '每日打卡', '[每日打卡]',
-            '签到的猫粮', '领取猫粮', '[签到的猫粮]', '领取魔力'
+            '签到得猫粮', '[签到得猫粮]', '签到的猫粮', '领取猫粮', '[签到的猫粮]', '领取魔力'
         ];
 
         for (const el of allButtons) {
@@ -406,10 +469,12 @@
             if (
                 !el.disabled &&
                 (exactTargetsNoSpace.includes(noSpace) ||
+                    noSpace.includes('签到得猫粮') ||
                     noSpace.includes('签到的猫粮') ||
                     noSpace.includes('每日打卡') ||
                     noSpace.includes('立即签到') ||
-                    noSpace.includes('点此签到'))
+                    noSpace.includes('点此签到') ||
+                    /^签到\+\d+$/.test(noSpace))
             ) {
                 triggerElement(el, text);
                 return;
