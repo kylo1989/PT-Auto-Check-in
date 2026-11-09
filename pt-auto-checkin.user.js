@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         PT 站点全自动签到助手 (125站内置版)
 // @namespace    https://github.com/kylo1989/PT-Auto-Check-in
-// @version      1.2.7
-// @description  基于稳定的1.2.4内核重构，使用原生click触发，全面修复HDWinG、TTG、海胆cc、HDArea、HDSky拉起验证码、猫站【签到得猫粮】及猪站【签到：+1000】。
+// @version      1.2.8
+// @description  基于稳定的1.2.4内核，保持其余站点不动，专门通过主页面上下文与原生接口彻底解决 HDArea 与 猪站(piggo.me) 万年历点击不生效问题。
 // @author       kylo1989
 // @homepageURL  https://github.com/kylo1989/PT-Auto-Check-in
 // @supportURL   https://github.com/kylo1989/PT-Auto-Check-in/issues
@@ -198,6 +198,14 @@
         }, 4000);
     }
 
+    // 在主页面（Main World）上下文中执行代码，绕过油猴沙盒隔离限制
+    function runInPageContext(fnCode) {
+        const script = document.createElement('script');
+        script.textContent = `(() => { try { ${fnCode} } catch(e) { console.error('[PT签到助手 PageContext]', e); } })();`;
+        (document.head || document.documentElement).appendChild(script);
+        script.remove();
+    }
+
     // 提取元素的文本内容（兼容 input 的 value 和普通标签的 innerText）
     function getElementText(el) {
         if (!el) return '';
@@ -227,7 +235,7 @@
         return targetKeywords.some(k => noSpace.includes(k));
     }
 
-    // 触发链接跳转或原生按钮点击（回归 1.2.4 最稳健的原生触发方式）
+    // 触发链接跳转或原生按钮点击
     function triggerElement(el, text, markDoneImmediately = true) {
         const href = (el.getAttribute && el.getAttribute('href')) || '';
 
@@ -256,39 +264,122 @@
     }
 
     // =========================================================================
-    // 专项站点 1：猪猪网 (piggo.me) 万年历签到处理
+    // 专项站点 1：HDArea (hdarea.club) 穿透沙盒调用原生 sign_in() + POST 双保险
+    // =========================================================================
+    function handleHDArea() {
+        if (GM_getValue(getTodayKey('done'), false)) return;
+
+        const signSpan = document.querySelector('#sign_in');
+        const signLink = document.querySelector('#sign_in a, a[onclick*="sign_in"], a[href*="sign_in"]');
+        const targetText = getElementText(signLink || signSpan);
+
+        if (isAlreadySignedText(targetText)) {
+            GM_setValue(getTodayKey('done'), true);
+            return;
+        }
+
+        if (signLink || (signSpan && isUncheckedText(targetText))) {
+            GM_setValue(getTodayKey('done'), true);
+            showToast('发现 HDArea 签到按钮，正在执行签到...', '#52c41a');
+
+            // 方式 A：注入主页面直接调用 HDArea 原生的 sign_in() 函数
+            runInPageContext(`
+                if (typeof window.sign_in === 'function') {
+                    window.sign_in();
+                } else {
+                    const a = document.querySelector('#sign_in a, a[onclick*="sign_in"]');
+                    if (a) a.click();
+                }
+            `);
+
+            // 方式 B：延时 500ms 检查，如果页面上的 #sign_in 还没变成已签到，直接用 fetch POST 请求 sign_in.php 接口
+            setTimeout(() => {
+                const currentSpan = document.querySelector('#sign_in');
+                const currentText = getElementText(currentSpan);
+                if (currentSpan && isAlreadySignedText(currentText)) {
+                    return;
+                }
+                fetch('/sign_in.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: 'action=sign_in',
+                    credentials: 'same-origin'
+                })
+                    .then(r => r.text())
+                    .then(resText => {
+                        if (resText && resText.trim()) {
+                            if (currentSpan) currentSpan.innerHTML = resText;
+                            showToast(`HDArea 签到完成：${resText.replace(/<[^>]+>/g, '').trim()}`, '#52c41a');
+                        }
+                    })
+                    .catch(err => console.error('[PT签到助手] HDArea POST 异常:', err));
+            }, 600);
+        }
+    }
+
+    // =========================================================================
+    // 专项站点 2：猪猪网 (piggo.me) 万年历签到（兼容 div/span/button 与 React 事件）
     // =========================================================================
     function handlePiggo() {
         if (GM_getValue(getTodayKey('done'), false)) return;
 
-        // 如果已经在 /calendar 万年历页面，轮询扫描真正的 <button> 节点
+        // 如果已经在 /calendar 万年历页面，轮询扫描“签到：+1000”按钮
         if (PATH.includes('/calendar')) {
             let attempts = 0;
             const timer = setInterval(() => {
                 attempts++;
-                // 猪站万年历的“签到：+1000”是一个标准的 <button> 元素
-                const buttons = document.querySelectorAll('button');
-                for (const btn of buttons) {
-                    const text = getElementText(btn);
+
+                // 扫描所有可能的标签（猪站橙色胶囊可能是 div、span 或 button）
+                const allNodes = document.querySelectorAll('button, div, span, a');
+                let targetEl = null;
+                let matchedText = '';
+
+                for (const el of allNodes) {
+                    // 只找最内层包含该文字的节点（子元素不超过 2 个），避免选中整个网页外框容器
+                    if (el.children.length > 2) continue;
+                    const text = getElementText(el);
                     if (!text) continue;
                     const noSpace = text.replace(/\s+/g, '');
+                    if (noSpace.length > 16) continue;
 
-                    // 如果按钮已变成“已签到”或“今日已签”或处于 disabled
-                    if (isAlreadySignedText(noSpace) || noSpace === '已签' || (btn.disabled && noSpace.includes('签'))) {
+                    // 1. 如果页面上已经显示“已签到” / “今日已签”
+                    if (noSpace === '已签到' || noSpace === '今日已签' || noSpace === '已签') {
                         clearInterval(timer);
                         GM_setValue(getTodayKey('done'), true);
                         showToast('猪站今日已完成签到！', '#52c41a');
                         return;
                     }
 
-                    // 精准匹配“签到：+1000” / “签到+1000” / “签到”按钮
-                    if (noSpace.includes('签到') && (noSpace.includes('+') || noSpace.includes('＋') || /\d/.test(noSpace) || noSpace === '签到')) {
-                        clearInterval(timer);
-                        GM_setValue(getTodayKey('done'), true);
-                        showToast(`发现猪站【${text}】按钮，正在自动点击...`, '#52c41a');
-                        btn.click();
-                        return;
+                    // 2. 严格匹配猪站日历页橙色按钮格式：“签到：+1000” / “签到:+1000” / “签到+1000”
+                    if (/^签到[:：]?[+＋]?\d+$/.test(noSpace) || noSpace === '立即签到') {
+                        targetEl = el;
+                        matchedText = text;
+                        break;
                     }
+                }
+
+                if (targetEl) {
+                    clearInterval(timer);
+                    GM_setValue(getTodayKey('done'), true);
+                    // 给目标节点打上临时属性，供主页面脚本精准定位并触发 React 完整事件链
+                    targetEl.setAttribute('data-pt-auto-target', '1');
+                    showToast(`发现猪站【${matchedText}】按钮，正在自动点击...`, '#52c41a');
+
+                    runInPageContext(`
+                        const el = document.querySelector('[data-pt-auto-target="1"]');
+                        if (el) {
+                            // 依次收集自身、父级、祖父级（应对事件绑定在外层胶囊 div 或 button 上的情况）
+                            const targets = [el, el.parentElement, el.closest('button, [role="button"], a')].filter(Boolean);
+                            const uniqueTargets = [...new Set(targets)];
+                            uniqueTargets.forEach(t => {
+                                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+                                    t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+                                });
+                                if (typeof t.click === 'function') t.click();
+                            });
+                        }
+                    `);
+                    return;
                 }
 
                 if (attempts >= 15) {
@@ -307,12 +398,11 @@
     }
 
     // =========================================================================
-    // 专项站点 2：猫站 (pterclub.net / pterclub.com) 【签到得猫粮】精准点击
+    // 专项站点 3：猫站 (pterclub.net / pterclub.com) 【签到得猫粮】精准点击
     // =========================================================================
     function handlePTerClub() {
         if (GM_getValue(getTodayKey('done'), false)) return;
 
-        // 遍历页面所有 a 标签，精准匹配“签到得猫粮”
         const links = document.querySelectorAll('a#attendance-click, a[href*="attendance"], a.faqlink, a');
         for (const a of links) {
             const text = getElementText(a);
@@ -334,12 +424,11 @@
     }
 
     // =========================================================================
-    // 专项站点 3：HDSky (hdsky.me) 自动点击签到拉起验证码框并高亮输入框
+    // 专项站点 4：HDSky (hdsky.me) 自动点击签到拉起验证码框并高亮输入框
     // =========================================================================
     function handleHDSky() {
         if (GM_getValue(getTodayKey('done'), false)) return;
 
-        // 查找 HDSky 顶部导航栏中的“签到”或“已签到”
         const links = document.querySelectorAll('a[onclick*="show_image_code"], a[onclick*="sign"], a.faqlink, a');
         for (const a of links) {
             const text = getElementText(a);
@@ -352,11 +441,9 @@
             }
 
             if (noSpace === '签到' || noSpace === '[签到]') {
-                // 注意：HDSky 点击签到只是拉起验证码弹窗，此时不标记 done，方便用户填验证码
                 showToast('已为您自动拉起 HDSky 签到验证码窗口，请输入验证码！', '#faad14');
                 a.click();
 
-                // 延时 600ms 等待验证码输入框弹出后自动聚焦并加红框高亮
                 setTimeout(() => {
                     const input = document.querySelector('input[name*="imagestring"], input[id*="imagestring"], input[type="text"][name*="code"]');
                     if (input) {
@@ -373,7 +460,6 @@
     function handleAttendancePage() {
         const pageText = document.body.innerText || '';
 
-        // 1. 如果页面提示需要填写验证码或回答问题，高亮提醒人工介入
         const hasCaptcha = document.querySelector('input[name*="imagestring"], input[name*="captcha"], img[src*="image.php"]');
         if (hasCaptcha) {
             showToast('当前签到页含验证码，请手动完成输入', '#faad14');
@@ -382,7 +468,6 @@
             return;
         }
 
-        // 2. 查找签到专页内的确认提交按钮
         const submitBtns = document.querySelectorAll('input[type="submit"], input[type="button"], button[type="submit"], button');
         for (const btn of submitBtns) {
             const val = getElementText(btn).replace(/\s+/g, '');
@@ -394,7 +479,6 @@
             }
         }
 
-        // 3. 如果直接跳转进 attendance.php 即代表完成签到
         const cleanPageText = pageText.replace(/\s+/g, '');
         if (
             cleanPageText.includes('签到成功') ||
@@ -412,6 +496,10 @@
     // 主入口：扫描导航栏与页面签到按钮
     function runCheckin() {
         // 专项站点优先分流
+        if (HOST.includes('hdarea.club')) {
+            handleHDArea();
+            return;
+        }
         if (HOST.includes('piggo.me')) {
             handlePiggo();
             return;
@@ -437,17 +525,12 @@
             return;
         }
 
-        // 1. 特殊站点专用选择器适配（完全基于 1.2.4 稳定逻辑，并补齐 HDArea、海胆、HDWinG、TTG）
+        // 1. 特殊站点专用选择器适配
         const specialRules = [
             // 海胆之家 (haidan.cc / haidan.video) - <input type="submit" id="modalBtn" value="每日打卡">
             {
                 host: 'haidan',
                 selector: '#modalBtn, input[value*="每日打卡"], input[value*="已经打卡"], button[id*="modalBtn"]'
-            },
-            // HDArea (hdarea.club) - <span id="sign_in"><a onclick="sign_in();">...</a></span>
-            {
-                host: 'hdarea.club',
-                selector: '#sign_in a, a[onclick*="sign_in"], #sign_in, [onclick*="sign_in"]'
             },
             // HDChina / HDWinG (hdwing.org / hdchina.org) - 右上角按钮“签 到”
             {
